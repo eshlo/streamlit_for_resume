@@ -1,0 +1,13 @@
+streamlit>=1.38
+opencv-python-headless
+pyzbar
+pillow
+pandas
+numpy
+streamlit-webrtc
+av
+streamlit-option-menu
+openpyxl
+jdatetime
+plotly
+plotly

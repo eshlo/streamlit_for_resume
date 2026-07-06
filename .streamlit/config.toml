@@ -1,0 +1,11 @@
+# تنظیمات ظاهری کلی برنامه — این فایل باید در کنار warehouse_app.py،
+# داخل یک پوشه به نام .streamlit قرار بگیرد (یعنی مسیر نهایی باید
+# .streamlit/config.toml باشد). Streamlit به‌صورت خودکار این فایل را
+# می‌خواند و رنگ اصلی دکمه‌ها، تب‌ها، چک‌باکس‌ها و... را از اینجا می‌گیرد.
+
+[theme]
+primaryColor = "#13BFFD"
+backgroundColor = "#FFFFFF"
+secondaryBackgroundColor = "#EAF2FB"
+textColor = "#0D1B2A"
+font = "sans serif"
