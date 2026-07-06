@@ -972,6 +972,11 @@ def realtime_barcode_scanner(state_key: str, prompt: str, start_label: str = "ش
     st.caption(f"📷 {prompt}")
     webrtc_kwargs = dict(
             key=f"scanner_{state_key}",
+            rtc_configuration={
+                "iceServers": [
+                    {"urls": ["stun:stun.l.google.com:19302"]}
+                ]
+            },
             mode=WebRtcMode.SENDRECV,
             video_processor_factory=_Processor,
             media_stream_constraints={
