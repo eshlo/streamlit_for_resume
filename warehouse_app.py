@@ -974,8 +974,29 @@ def realtime_barcode_scanner(state_key: str, prompt: str, start_label: str = "ش
             key=f"scanner_{state_key}",
             rtc_configuration={
                 "iceServers": [
-                    {"urls": ["stun:stun.l.google.com:19302"]}
+                    {"urls": "stun:stun.relay.metered.ca:80"},
+                    {
+                        "urls": "turn:global.relay.metered.ca:80",
+                        "username": "cd179119c0f24eb9b98b6502",
+                        "credential": "jUbUVq6QEjYf4vhL",
+                    },
+                    {
+                        "urls": "turn:global.relay.metered.ca:80?transport=tcp",
+                        "username": "cd179119c0f24eb9b98b6502",
+                        "credential": "jUbUVq6QEjYf4vhL",
+                    },
+                    {
+                        "urls": "turn:global.relay.metered.ca:443",
+                        "username": "cd179119c0f24eb9b98b6502",
+                        "credential": "jUbUVq6QEjYf4vhL",
+                    },
+                    {
+                        "urls": "turns:global.relay.metered.ca:443?transport=tcp",
+                        "username": "cd179119c0f24eb9b98b6502",
+                        "credential": "jUbUVq6QEjYf4vhL",
+                    },
                 ]
+
             },
             mode=WebRtcMode.SENDRECV,
             video_processor_factory=_Processor,
