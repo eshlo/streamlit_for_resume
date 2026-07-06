@@ -11,8 +11,6 @@ openpyxl
 jdatetime
 plotly
 plotly
-=======
 altair
-pandas
-streamlit
+
 
