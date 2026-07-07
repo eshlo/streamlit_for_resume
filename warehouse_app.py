@@ -1,5 +1,34 @@
 # -*- coding: utf-8 -*-
+"""
+📦 سیستم مدیریت انبار — نسخه‌ی دوم (SQLite)
+=====================================================
+تغییرات نسبت به نسخه‌ی قبل:
+  1) مهاجرت از CSV به پایگاه‌داده‌ی SQLite (data/warehouse.db)
+  2) در ورود و خروج کالا، «تعداد» از کاربر پرسیده می‌شود و در دیتابیس
+     به‌صورت جمع/کسر روی موجودی اعمال می‌شود (نه فقط ثبت یک ردیف ساده)
+  3) جدول زنده‌ی موجودی/آدرس با گرافیک شیک (progress bar + جستجو + متریک)
+     دقیقاً زیر بارکدخوان نمایش داده می‌شود (نه در ستون کناری)
+  4) دکمه‌ی دانلود اکسل استاندارد (.xlsx) با فرمت حرفه‌ای (هدر رنگی،
+     فیلتر خودکار، عرض ستون خودکار، راست‌چین) — هم در نوار بالا و هم
+     در صفحه‌ی تحلیل داده
+  5) منوی افقی پیشرفته‌تر با آیکون و استایل سفارشی
 
+نصب پیش‌نیازها:
+    pip install streamlit opencv-python-headless pyzbar pillow pandas ^
+                streamlit-webrtc av streamlit-option-menu openpyxl
+
+اجرا:
+    streamlit run warehouse_app.py
+
+نکات:
+  - داده‌های نسخه‌ی قبلی (CSV) به‌صورت خودکار منتقل نمی‌شوند؛ این نسخه با
+    یک پایگاه‌داده‌ی تازه شروع می‌کند. اگر نیاز به انتقال داده‌های قدیمی
+    دارید بگویید تا اسکریپت migrate را هم اضافه کنم.
+  - نام‌کاربری/رمزها هنوز به‌صورت ساده و درون کد هستند (فقط برای دمو).
+  - رابط کاربری ریسپانسیو است: کارت‌ها، جدول‌ها، منو و دکمه‌ها روی موبایل و
+    تبلت (زیر ۷۶۸ پیکسل) به‌صورت خودکار فشرده/تک‌ستونه می‌شوند. برای اسکن
+    بارکد روی موبایل، دوربین پشت گوشی به‌صورت پیش‌فرض انتخاب می‌شود.
+"""
 
 from __future__ import annotations
 
@@ -27,14 +56,12 @@ from pyzbar.pyzbar import ZBarSymbol
 
 try:
     import jdatetime
-
     JALALI_AVAILABLE = True
 except ImportError:
     JALALI_AVAILABLE = False
 
 try:
     import plotly.graph_objects as go
-
     PLOTLY_AVAILABLE = True
 except ImportError:
     PLOTLY_AVAILABLE = False
@@ -43,14 +70,14 @@ except ImportError:
 # تنظیمات کلی صفحه
 # ---------------------------------------------------------------------------
 st.set_page_config(
-        page_title="انبار هوشمند",
-        page_icon="icon.ico",
-        layout="wide",
-        initial_sidebar_state="collapsed",
+    page_title="انبار هوشمند",
+    page_icon="🏬",
+    layout="wide",
+    initial_sidebar_state="collapsed",
 )
 
-APP_TITLE = " ◝انبار هوشمند◟"
-APP_SUBTITLE = "╣ با افتخار طرحی از محمدرضا محمدزاده ╠"
+APP_TITLE = "🏬 انبار هوشمند"
+APP_SUBTITLE = "با افتخار طرحی از محمدرضا محمدزاده"
 
 # مسیر فایل لوگو — کافی است فایل logo.png را کنار همین اسکریپت قرار دهید.
 LOGO_PATH = "logo.png"
@@ -65,194 +92,223 @@ DEBOUNCE_SECONDS = 2.0  # فاصله‌ی زمانی جلوگیری از ثبت 
 # استایل مدرن، ساده و راست‌چین
 # ---------------------------------------------------------------------------
 st.html(
-        """
-        <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css">
-        <style>
-        @import url('https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;600;700;800&display=swap');
+    """
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css">
+    <style>
+    @import url('https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;600;700;800&display=swap');
 
-        :root {
-            --brand-blue-dark: #0d47a1;
-            --brand-blue: #1565c0;
-            --brand-blue-light: #1976d2;
-            --brand-blue-tint: #eaf2fb;
-            --brand-blue-tint-2: #dbe9fa;
-            --text-dark: #0d1b2a;
+    :root {
+        --brand-blue-dark: #0d47a1;
+        --brand-blue: #1565c0;
+        --brand-blue-light: #1976d2;
+        --brand-blue-tint: #eaf2fb;
+        --brand-blue-tint-2: #dbe9fa;
+        --text-dark: #0d1b2a;
+    }
+
+    html, body, [class*="css"]  { font-family: 'Vazirmatn', sans-serif; }
+    .main, .block-container { direction: rtl; }
+    .stApp {
+        background: radial-gradient(circle at top right, #eaf2fb 0%, #f7faff 45%, #e3edfa 100%);
+    }
+    p, span, label, div { direction: rtl; text-align: right; }
+
+    /* ===================== سلسله‌مراتب تایپوگرافی هدرها ===================== */
+    h1, h2, h3, h4, h5 { direction: rtl; text-align: right; color: var(--text-dark); font-family: 'Vazirmatn', sans-serif; }
+    h1 { font-size: 2.1rem; font-weight: 800; color: var(--brand-blue-dark); margin-bottom: 0.2rem; }
+    h2 { font-size: 1.55rem; font-weight: 700; color: var(--brand-blue-dark); }
+    h3 { font-size: 1.28rem; font-weight: 700; color: #123a63; }
+    h4 { font-size: 1.08rem; font-weight: 600; color: #1a4971; }
+
+    /* عنوان اصلی برنامه — وسط‌چین و در بالای صفحه */
+    .app-title-wrap { text-align: center; padding: 4px 0 10px 0; }
+    .app-title-wrap h1 { font-size: 2.3rem; margin: 0; }
+    .app-subtitle { text-align: center; color: #5b6b82; font-size: 0.85rem; font-weight: 500; margin-top: -2px; }
+
+    /* لوگو — بدون شادو، فقط خودِ تصویر */
+    .logo-wrap { display: flex; align-items: center; height: 100%; }
+    .logo-wrap img {
+        border-radius: 6px;
+        transition: transform .15s ease;
+    }
+    .logo-wrap img:hover { transform: scale(1.03); }
+
+    .card {
+        background: #ffffff;
+        border-radius: 16px;
+        padding: 22px 26px;
+        box-shadow: 0 4px 18px rgba(13, 71, 161, 0.08);
+        margin-bottom: 16px;
+        border-top: 3px solid var(--brand-blue-light);
+    }
+    .card-success {
+        background: #eafaf0;
+        border: 2px solid #33b06f;
+        border-radius: 16px;
+        padding: 20px 24px;
+        margin: 10px 0;
+        animation: pop 0.35s ease;
+    }
+    .card-warning {
+        background: #fff8e6;
+        border: 2px solid #e6a817;
+        border-radius: 16px;
+        padding: 18px 22px;
+        margin: 10px 0;
+    }
+    @keyframes pop {
+        0%   { transform: scale(0.97); opacity: 0.6; }
+        100% { transform: scale(1); opacity: 1; }
+    }
+
+    .stButton>button,
+    button[kind] {
+        border-radius: 10px;
+        font-weight: 600;
+        padding: 0.55rem 1rem;
+        border: none;
+        transition: all .15s ease;
+        background: linear-gradient(135deg, #0d47a1 0%, #13BFFD 100%);
+        color: #ffffff;
+    }
+    .stButton>button:hover,
+    button[kind]:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(13,71,161,0.28);
+        background: linear-gradient(135deg, #0d47a1 0%, #1976d2 100%);
+        color: #ffffff;
+    }
+    .stButton>button:disabled,
+    button[kind]:disabled { background: #cfd8e3; color: #7a8595; }
+    /* تب‌ها و سایر ویجت‌های بومی هم به رنگ آبی برند */
+    .stTabs [aria-selected="true"] { color: #0d47a1 !important; }
+    .stTabs [data-baseweb="tab-highlight"] { background-color: #13BFFD !important; }
+
+    .login-wrapper {
+        max-width: 380px;
+        margin: 3vh auto 0 auto;
+        background: #ffffff;
+        border-radius: 20px;
+        padding: 36px 32px;
+        box-shadow: 0 10px 40px rgba(13,71,161,0.15);
+        border-top: 4px solid var(--brand-blue-light);
+    }
+    .login-title { text-align: center; font-weight: 800; font-size: 1.5rem; margin-bottom: 2px; color: var(--brand-blue-dark); }
+    .login-sub { text-align: center; color: #7a7f8c; margin-bottom: 22px; font-size: 0.9rem; }
+
+    .metric-box {
+        background: #ffffff;
+        border-radius: 14px;
+        padding: 16px 10px;
+        text-align: center;
+        box-shadow: 0 2px 8px rgba(13,71,161,0.08);
+        border-bottom: 4px solid var(--brand-blue-light);
+    }
+    .metric-box h3 { margin: 0; font-size: 1.6rem; color: #222; }
+    .metric-box span { color: #7a7f8c; font-size: 0.85rem; }
+
+    /* نسخه‌ی بزرگ‌تر متریک‌باکس — برای «جدول اول» صفحه‌ی تحلیل داده */
+    .metric-box-big {
+        background: #ffffff;
+        border-radius: 14px;
+        padding: 22px 12px;
+        text-align: center;
+        box-shadow: 0 2px 10px rgba(13,71,161,0.1);
+        border-bottom: 4px solid var(--brand-blue-light);
+    }
+    .metric-box-big h3 { margin: 0; font-size: 2.2rem; color: #000000; font-weight: 800; }
+    .metric-box-big span { color: #000000; font-size: 0.95rem; font-weight: 600; }
+
+    .download-card {
+        background: linear-gradient(135deg, var(--brand-blue-dark) 0%, var(--brand-blue-light) 100%);
+        border-radius: 16px;
+        padding: 20px 26px;
+        color: white;
+        box-shadow: 0 6px 20px rgba(13,71,161,0.35);
+    }
+    .download-card h4, .download-card p { color: white !important; }
+
+    /* راست‌چین کردن کامل منوها و عناصر افقی (رفع مشکل چپ‌چین بودن) */
+    div[data-testid="stHorizontalBlock"] { direction: rtl; }
+    div[role="radiogroup"] { flex-direction: row-reverse !important; direction: rtl; justify-content: flex-end; }
+    div[data-testid="stRadio"] > div { direction: rtl; }
+    iframe { direction: rtl; }
+
+    /* استایل مودال‌های تایید */
+    div[data-testid="stDialog"] div[role="dialog"] { direction: rtl; text-align: right; border-radius: 18px; }
+
+    /* ===================== ریسپانسیو (موبایل و تبلت) ===================== */
+    @media (max-width: 768px) {
+        html, body { overflow-x: hidden !important; }
+        .stApp { overflow-x: hidden !important; }
+        .block-container { padding: 1rem 0.6rem !important; max-width: 100vw !important; }
+        .card { padding: 14px 12px; border-radius: 14px; margin-bottom: 12px; }
+        .card-success, .card-warning { padding: 12px 14px; font-size: 0.88rem; }
+        .login-wrapper { max-width: 94%; padding: 26px 18px; margin: 3vh auto 0 auto; }
+        .login-title { font-size: 1.25rem; }
+        .app-title-wrap h1 { font-size: 1.4rem !important; }
+        h1 { font-size: 1.3rem !important; }
+        h2 { font-size: 1.15rem !important; }
+        h3, h4 { font-size: 1.0rem !important; }
+        .logo-wrap img { height: 32px; }
+        .metric-box { padding: 8px 4px; border-radius: 10px; }
+        .metric-box h3 { font-size: 1.05rem; }
+        .metric-box span { font-size: 0.62rem; }
+        .metric-box-big { padding: 12px 4px; border-radius: 10px; }
+        .metric-box-big h3 { font-size: 1.3rem; }
+        .metric-box-big span { font-size: 0.68rem; }
+        .download-card { padding: 16px 16px; }
+        .scanner-frame { padding: 8px; }
+        .stButton>button, button[kind] { font-size: 0.84rem; padding: 0.5rem 0.6rem; width: 100%; }
+
+        /* تک‌ستونه‌کردن همه‌ی ستون‌های افقی — چند سلکتور برای سازگاری با نسخه‌های مختلف Streamlit */
+        div[data-testid="stHorizontalBlock"] {
+            flex-wrap: wrap !important;
+            gap: 6px !important;
         }
-    
-        html, body, [class*="css"]  { font-family: 'Vazirmatn', sans-serif; }
-        .main, .block-container { direction: rtl; }
-        .stApp {
-                background: white;
+        div[data-testid="stHorizontalBlock"] > div {
+            min-width: 100% !important;
+            width: 100% !important;
+            flex: 1 1 100% !important;
         }
-        p, span, label, div { direction: rtl; text-align: right; }
-    
-        /* ===================== سلسله‌مراتب تایپوگرافی هدرها ===================== */
-        h1, h2, h3, h4, h5 { direction: rtl; text-align: right; color: var(--text-dark); font-family: 'Vazirmatn', sans-serif; }
-        h1 { font-size: 2.1rem; font-weight: 800; color: var(--brand-blue-dark); margin-bottom: 0.2rem; }
-        h2 { font-size: 1.55rem; font-weight: 700; color: var(--brand-blue-dark); }
-        h3 { font-size: 1.28rem; font-weight: 700; color: #123a63; }
-        h4 { font-size: 1.08rem; font-weight: 600; color: #1a4971; }
-    
-        /* عنوان اصلی برنامه — وسط‌چین و در بالای صفحه */
-        .app-title-wrap { text-align: center; padding:0; }
-        .app-title-wrap h1 { text-align: center; font-size: 2.3rem; margin: 0; }
-        .app-subtitle { text-align: center; color: #5b6b82; font-size: 0.85rem; font-weight: 500; margin-top: 10px; }
-    
-        /* لوگو — بدون شادو، فقط خودِ تصویر */
-        .logo-wrap { display: flex; align-items: center; height: 100%; }
-        .logo-wrap img {
-      
-            transition: transform .15s ease;
+        div[data-testid="column"],
+        div[data-testid="stColumn"] {
+            min-width: 100% !important;
+            width: 100% !important;
         }
-        .logo-wrap img:hover { transform: scale(1.03); }
-    
-        .card {
-        border: none !important; border-top: 1px dashed rgba(13,71,161,0.35) !important; margin: 14px 0 !important; background: none !important;
-        }
-        .card-success {
-            background: #eaf000;
-            border: 2px solid #33b06f;
-            border-radius: 16px;
-            padding: 20px 24px;
-            margin: 10px 0;
-            animation: pop 0.35s ease;
-        }
-        .card-warning {
-            background: #fff8e6;
-            border: 2px solid #e6a817;
-            border-radius: 16px;
-            padding: 18px 22px;
-            margin: 10px 0;
-        }
-        @keyframes pop {
-            0%   { transform: scale(0.97); opacity: 0.6; }
-            100% { transform: scale(1); opacity: 1; }
-        }
-    
-        .stButton>button,
-        button[kind] {
-            border-radius: 10px;
-            font-weight: 600;
-            padding: 0.55rem 1rem;
-            border: none;
-            transition: all .15s ease;
-            background: linear-gradient(135deg, #0d47a1 0%, #13BFFD 100%);
-            color: #ffffff;
-        }
-        .stButton>button:hover,
-        button[kind]:hover {
-            transform: translateY(-1px);
-            box-shadow: 0 4px 12px rgba(13,71,161,0.28);
-            background: linear-gradient(135deg, #0d47a1 0%, #1976d2 100%);
-            color: #ffffff;
-        }
-        .stButton>button:disabled,
-        button[kind]:disabled { background: #cfd8e3; color: #7a8595; }
-        /* تب‌ها و سایر ویجت‌های بومی هم به رنگ آبی برند */
-        .stTabs [aria-selected="true"] { color: #0d47a1 !important; }
-        .stTabs [data-baseweb="tab-highlight"] { background-color: #13BFFD !important; }
-    
-        .login-wrapper {
-            max-width: 380px;
-            margin: 3vh auto 0 auto;
-            background: #ffffff;
-            border-radius: 20px;
-            padding: 36px 32px;
-            box-shadow: 0 10px 40px rgba(13,71,161,0.15);
-            border-top: 4px solid var(--brand-blue-light);
-        }
-        .login-title { text-align: center; font-weight: 800; font-size: 1.5rem; margin-bottom: 2px; color: var(--brand-blue-dark); }
-        .login-sub { text-align: center; color: #7a7f8c; margin-bottom: 22px; font-size: 0.9rem; }
-    
-        .metric-box {
-            background: #ffffff;
-            border-radius: 14px;
-            padding: 16px 10px;
-            text-align: center;
-            box-shadow: 0 2px 8px rgba(13,71,161,0.08);
-            border-bottom: 4px solid var(--brand-blue-light);
-        }
-        .metric-box h3 { margin: 0; font-size: 1.6rem; color: #222; }
-        .metric-box span { color: #7a7f8c; font-size: 0.85rem; }
-    
-        /* نسخه‌ی بزرگ‌تر متریک‌باکس — برای «جدول اول» صفحه‌ی تحلیل داده */
-        .metric-box-big {
-            background: #ffffff;
-            border-radius: 14px;
-            padding: 22px 12px;
-            text-align: center;
-            box-shadow: 0 2px 10px rgba(13,71,161,0.1);
-            border-bottom: 4px solid var(--brand-blue-light);
-        }
-        .metric-box-big h3 { margin: 0; font-size: 2.2rem; color: #000000; font-weight: 800; }
-        .metric-box-big span { color: #000000; font-size: 0.95rem; font-weight: 600; }
-    
-        .download-card {
-            background: linear-gradient(135deg, var(--brand-blue-dark) 0%, var(--brand-blue-light) 100%);
-            border-radius: 16px;
-            padding: 20px 26px;
-            color: white;
-            box-shadow: 0 6px 20px rgba(13,71,161,0.35);
-        }
-        .download-card h4, .download-card p { color: white !important; }
-    
-        /* راست‌چین کردن کامل منوها و عناصر افقی (رفع مشکل چپ‌چین بودن) */
-        div[data-testid="stHorizontalBlock"] { direction: rtl; }
-        div[role="radiogroup"] { flex-direction: row-reverse !important; direction: rtl; justify-content: flex-end; }
-        div[data-testid="stRadio"] > div { direction: rtl; }
-        iframe { direction: rtl; }
-    
-        /* استایل مودال‌های تایید */
-        div[data-testid="stDialog"] div[role="dialog"] { direction: rtl; text-align: right; border-radius: 18px; }
-    
-        /* ===================== ریسپانسیو (موبایل و تبلت) ===================== */
-        @media (max-width: 768px) {
-            .block-container { padding: 1rem 0.8rem !important; }
-            .card { padding: 16px 14px; border-radius: 14px; margin-bottom: 12px; }
-            .card-success, .card-warning { padding: 14px 16px; font-size: 0.92rem; }
-            .login-wrapper { max-width: 94%; padding: 26px 18px; margin: 3vh auto 0 auto; }
-            .login-title { font-size: 1.25rem; }
-            .app-title-wrap h1 { font-size: 1.5rem !important; }
-            h1 { font-size: 1.4rem !important; }
-            h2 { font-size: 1.2rem !important; }
-            h3, h4 { font-size: 1.02rem !important; }
-            .logo-wrap img { height: 36px; }
-            .metric-box { padding: 10px 4px; border-radius: 10px; }
-            .metric-box h3 { font-size: 1.15rem; }
-            .metric-box span { font-size: 0.68rem; }
-            .metric-box-big { padding: 14px 6px; border-radius: 10px; }
-            .metric-box-big h3 { font-size: 1.5rem; }
-            .metric-box-big span { font-size: 0.75rem; }
-            .download-card { padding: 16px 16px; }
-            .stButton>button { font-size: 0.86rem; padding: 0.55rem 0.7rem; width: 100%; }
-            div[data-testid="stHorizontalBlock"] { flex-wrap: wrap !important; gap: 8px !important; }
-            div[data-testid="column"] { min-width: 100% !important; }
-            table { font-size: 0.82rem !important; }
-            video { width: 100% !important; height: auto !important; border-radius: 12px; }
-        }
-        @media (max-width: 480px) {
-            .login-wrapper { padding: 20px 14px; }
-            .metric-box h3 { font-size: 1.0rem; }
-        }
-    
-        /* بارکدخوان و پخش‌کننده‌ی وب‌کم همیشه full-width و ریسپانسیو */
-        iframe[title="streamlit_webrtc.webrtc_streamer"], video { max-width: 100% !important; }
-    
-        /* جداکننده به‌صورت خط‌چین آبی کم‌رنگ، به‌جای باکس پیش‌فرض */
-        hr { border: none !important; border-top: 1px dashed rgba(13,71,161,0.35) !important; margin: 14px 0 !important; background: none !important; }
-    
-        /* قاب نیمه‌شفاف دور اسکنر بارکد */
-        .scanner-frame {
-            background: rgba(19,191,253,0.08);
-            border: 1px dashed rgba(13,71,161,0.35);
-            border-radius: 14px;
-            padding: 14px;
-            margin-bottom: 10px;
-        }
-    
-        footer {visibility: hidden;}
-        </style>
-        """
+
+        table { font-size: 0.78rem !important; }
+        video { width: 100% !important; height: auto !important; border-radius: 12px; }
+
+        /* منوی افقی روی موبایل فشرده‌تر */
+        iframe[title*="option_menu"] { max-height: 60px !important; }
+    }
+    @media (max-width: 480px) {
+        .login-wrapper { padding: 18px 12px; }
+        .metric-box h3 { font-size: 0.95rem; }
+        .app-title-wrap h1 { font-size: 1.15rem !important; }
+        .app-subtitle { font-size: 0.72rem !important; }
+        .logo-wrap img { height: 28px; }
+    }
+
+    /* بارکدخوان و پخش‌کننده‌ی وب‌کم همیشه full-width و ریسپانسیو */
+    iframe[title="streamlit_webrtc.webrtc_streamer"], video { max-width: 100% !important; }
+
+    /* جداکننده به‌صورت خط‌چین آبی کم‌رنگ، به‌جای باکس پیش‌فرض */
+    hr { border: none !important; border-top: 1px dashed rgba(13,71,161,0.35) !important; margin: 14px 0 !important; background: none !important; }
+
+    /* قاب نیمه‌شفاف دور اسکنر بارکد */
+    .scanner-frame {
+        background: rgba(19,191,253,0.08);
+        border: 1px dashed rgba(13,71,161,0.35);
+        border-radius: 14px;
+        padding: 14px;
+        margin-bottom: 10px;
+    }
+
+    footer {visibility: hidden;}
+    </style>
+    """
 )
 
 
@@ -322,15 +378,21 @@ def kill_browser_autofill():
     components.html(js_iframe, height=0)
 
 
-def render_logo(height_px: int = 200, align: str = "flex"):
-
+def render_logo(height_px: int = 52, align: str = "flex-end"):
+    """
+    نمایش لوگو، لینک‌شده به وب‌سایت شرکت.
+    کافی است فایلی با نام logo.png (مسیرش در LOGO_PATH) کنار همین اسکریپت
+    قرار بگیرد؛ در غیر این صورت یک جای‌نگه‌دار ساده نمایش داده می‌شود.
+    align: "center" برای صفحه‌ی لاگین (وسط-بالا) یا "flex-end" برای صفحه‌ی
+    اصلی (راست-بالا، چون جهت صفحه rtl است).
+    """
     if os.path.exists(LOGO_PATH):
         try:
             with open(LOGO_PATH, "rb") as f:
                 b64 = base64.b64encode(f.read()).decode()
             ext = os.path.splitext(LOGO_PATH)[1].lstrip(".").lower() or "png"
             st.html(
-                    f"""<div class="logo-wrap" style="justify-content:{align};">
+                f"""<div class="logo-wrap" style="justify-content:{align};">
                 <a href="{LOGO_LINK}" target="_blank" title="{LOGO_LINK}">
                     <img src="data:image/{ext};base64,{b64}" style="height:{height_px}px;">
                 </a>
@@ -340,7 +402,7 @@ def render_logo(height_px: int = 200, align: str = "flex"):
             st.caption("🖼️ logo.png")
     else:
         st.html(
-                f"""<div class="logo-wrap" style="justify-content:{align};">
+            f"""<div class="logo-wrap" style="justify-content:{align};">
             <a href="{LOGO_LINK}" target="_blank" style="font-size:0.75rem;color:#7a7f8c;">
             🖼️ {LOGO_PATH}
             </a>
@@ -359,7 +421,13 @@ def get_connection():
 
 
 def migrate_schema_if_needed():
-
+    """
+    مهاجرت خودکار دیتابیس‌های قدیمی: در نسخه‌ی قبل، یک کد کالا می‌توانست هم‌زمان
+    در چند آدرس ثبت شود (UNIQUE روی item_code+address_code). طبق الزام جدید،
+    هر کد کالا فقط باید در یک آدرس باشد (UNIQUE روی item_code به‌تنهایی).
+    این تابع در صورت شناسایی schema قدیمی، داده‌ها را با جمع‌کردن تعداد و
+    انتخاب آخرین آدرس به‌روزرسانی‌شده، به schema جدید منتقل می‌کند.
+    """
     conn = get_connection()
     cur = conn.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='inventory'")
     row = cur.fetchone()
@@ -386,14 +454,14 @@ def migrate_schema_if_needed():
     if not old_df.empty:
         old_df = old_df.sort_values("last_updated")
         merged = old_df.groupby("item_code", as_index=False).agg(
-                address_code=("address_code", "last"),
-                quantity=("quantity", "sum"),
-                last_updated=("last_updated", "last"),
+            address_code=("address_code", "last"),
+            quantity=("quantity", "sum"),
+            last_updated=("last_updated", "last"),
         )
         for _, r in merged.iterrows():
             conn.execute(
-                    "INSERT INTO inventory (item_code, address_code, quantity, last_updated) VALUES (?, ?, ?, ?)",
-                    (r["item_code"], r["address_code"], int(r["quantity"]), r["last_updated"]),
+                "INSERT INTO inventory (item_code, address_code, quantity, last_updated) VALUES (?, ?, ?, ?)",
+                (r["item_code"], r["address_code"], int(r["quantity"]), r["last_updated"]),
             )
     conn.commit()
     conn.close()
@@ -448,8 +516,8 @@ def init_db():
         default_users = [("00000", "admin123"), ("00001", "1234")]
         for uname, pwd in default_users:
             conn.execute(
-                    "INSERT INTO users (username, password_hash, created_at) VALUES (?, ?, ?)",
-                    (uname, hash_password(pwd), now_str()),
+                "INSERT INTO users (username, password_hash, created_at) VALUES (?, ?, ?)",
+                (uname, hash_password(pwd), now_str()),
             )
         conn.commit()
 
@@ -488,8 +556,8 @@ def create_user(username: str, password: str) -> tuple[bool, str]:
         return False, "این نام کاربری قبلاً ثبت شده است."
     conn = get_connection()
     conn.execute(
-            "INSERT INTO users (username, password_hash, created_at) VALUES (?, ?, ?)",
-            (username, hash_password(password), now_str()),
+        "INSERT INTO users (username, password_hash, created_at) VALUES (?, ?, ?)",
+        (username, hash_password(password), now_str()),
     )
     conn.commit()
     conn.close()
@@ -569,8 +637,8 @@ def remove_stock(item_code: str, quantity: int, username: str) -> bool:
         conn.execute("DELETE FROM inventory WHERE item_code=?", (item_code,))
     else:
         conn.execute(
-                "UPDATE inventory SET quantity=?, last_updated=? WHERE item_code=?",
-                (new_qty, now_str(), item_code),
+            "UPDATE inventory SET quantity=?, last_updated=? WHERE item_code=?",
+            (new_qty, now_str(), item_code),
         )
     conn.execute("""
         INSERT INTO transactions (item_code, address_code, quantity, type, username, timestamp)
@@ -583,7 +651,10 @@ def remove_stock(item_code: str, quantity: int, username: str) -> bool:
 
 
 def move_item(item_code: str, new_address: str, username: str) -> bool:
-
+    """
+    جابه‌جایی کامل یک کالا به آدرس جدید. چون کالا نمی‌تواند هم‌زمان در دو آدرس
+    باشد، همیشه کل موجودی آن جابه‌جا می‌شود (تقسیم بین دو آدرس مجاز نیست).
+    """
     conn = get_connection()
     cur = conn.execute("SELECT address_code, quantity FROM inventory WHERE item_code=?", (item_code,))
     row = cur.fetchone()
@@ -596,27 +667,28 @@ def move_item(item_code: str, new_address: str, username: str) -> bool:
         return False
 
     conn.execute(
-            "UPDATE inventory SET address_code=?, last_updated=? WHERE item_code=?",
-            (new_address, now_str(), item_code),
+        "UPDATE inventory SET address_code=?, last_updated=? WHERE item_code=?",
+        (new_address, now_str(), item_code),
     )
     conn.execute(
-            "INSERT INTO transactions (item_code, address_code, quantity, type, username, timestamp) VALUES (?, ?, ?, 'MOVE_OUT', ?, ?)",
-            (item_code, old_address, quantity, username, now_str()),
+        "INSERT INTO transactions (item_code, address_code, quantity, type, username, timestamp) VALUES (?, ?, ?, 'MOVE_OUT', ?, ?)",
+        (item_code, old_address, quantity, username, now_str()),
     )
     conn.execute(
-            "INSERT INTO transactions (item_code, address_code, quantity, type, username, timestamp) VALUES (?, ?, ?, 'MOVE_IN', ?, ?)",
-            (item_code, new_address, quantity, username, now_str()),
+        "INSERT INTO transactions (item_code, address_code, quantity, type, username, timestamp) VALUES (?, ?, ?, 'MOVE_IN', ?, ?)",
+        (item_code, new_address, quantity, username, now_str()),
     )
     conn.commit()
     conn.close()
     return True
 
 
+
 def get_inventory_raw_df() -> pd.DataFrame:
     conn = get_connection()
     df = pd.read_sql_query(
-            "SELECT id, item_code, address_code, quantity, last_updated FROM inventory ORDER BY last_updated DESC",
-            conn,
+        "SELECT id, item_code, address_code, quantity, last_updated FROM inventory ORDER BY last_updated DESC",
+        conn,
     )
     conn.close()
     return df
@@ -636,7 +708,7 @@ def get_inventory_display_df() -> pd.DataFrame:
 def find_by_item_code(code: str) -> pd.DataFrame:
     conn = get_connection()
     df = pd.read_sql_query(
-            "SELECT * FROM inventory WHERE item_code=? AND quantity>0", conn, params=(code,),
+        "SELECT * FROM inventory WHERE item_code=? AND quantity>0", conn, params=(code,),
     )
     conn.close()
     return df
@@ -645,7 +717,7 @@ def find_by_item_code(code: str) -> pd.DataFrame:
 def find_by_address_code(code: str) -> pd.DataFrame:
     conn = get_connection()
     df = pd.read_sql_query(
-            "SELECT * FROM inventory WHERE address_code=? AND quantity>0", conn, params=(code,),
+        "SELECT * FROM inventory WHERE address_code=? AND quantity>0", conn, params=(code,),
     )
     conn.close()
     return df
@@ -662,11 +734,16 @@ ACTIVITY_LOG_MAX_ROWS = 500
 
 
 def log_activity(item_code: str, operation_type: str, quantity: int, username: str):
-
+    """
+    ثبت یک عملیات ورود/خروج در جدول جداگانه‌ی activity_log برای نمایش سریع در
+    صفحه‌ی تحلیل داده. این جدول حداکثر ۵۰۰ رکورد آخر را نگه می‌دارد (قدیمی‌ترها
+    خودکار حذف می‌شوند) و مستقل از جدول کامل transactions (که برای گزارش اکسل
+    و آرشیو کامل استفاده می‌شود) است.
+    """
     conn = get_connection()
     conn.execute(
-            "INSERT INTO activity_log (item_code, operation_type, quantity, username, timestamp) VALUES (?, ?, ?, ?, ?)",
-            (item_code, operation_type, quantity, username, now_str()),
+        "INSERT INTO activity_log (item_code, operation_type, quantity, username, timestamp) VALUES (?, ?, ?, ?, ?)",
+        (item_code, operation_type, quantity, username, now_str()),
     )
     conn.execute(f"""
         DELETE FROM activity_log WHERE id NOT IN (
@@ -680,21 +757,21 @@ def log_activity(item_code: str, operation_type: str, quantity: int, username: s
 def get_recent_activity_df(limit: int = 10) -> pd.DataFrame:
     conn = get_connection()
     df = pd.read_sql_query(
-            f"SELECT * FROM activity_log ORDER BY id DESC LIMIT {int(limit)}", conn,
+        f"SELECT * FROM activity_log ORDER BY id DESC LIMIT {int(limit)}", conn,
     )
     conn.close()
     return df
 
 
 def _period_label(dt: datetime, period: str) -> str:
-
+    """برچسب دوره (روز/هفته/ماه) برای یک تاریخ، بر مبنای تقویم هجری شمسی در صورت وجود jdatetime."""
     if period == "day":
         if JALALI_AVAILABLE:
             return jdatetime.date.fromgregorian(date=dt.date()).strftime("%Y/%m/%d")
         return dt.strftime("%Y-%m-%d")
 
     if period == "week":
-
+        # هفته‌ی شمسی از شنبه شروع می‌شود؛ weekday(): دوشنبه=۰ ... یکشنبه=۶ ، پس شنبه=۵
         days_since_saturday = (dt.weekday() - 5) % 7
         week_start = dt.date() - timedelta(days=days_since_saturday)
         if JALALI_AVAILABLE:
@@ -709,7 +786,10 @@ def _period_label(dt: datetime, period: str) -> str:
 
 
 def build_operation_counts(period: str) -> pd.DataFrame:
-
+    """
+    شمارش تعداد عملیات ورود/خروج به‌ازای هر دوره (روزانه/هفتگی/ماهانه) بر
+    اساس جدول کامل transactions. خروجی: ستون‌های period, ورود, خروج (مرتب‌شده).
+    """
     tx_df = get_transactions_df()
     tx_df = tx_df[tx_df["type"].isin(["IN", "OUT"])]
     if tx_df.empty:
@@ -729,7 +809,6 @@ def build_operation_counts(period: str) -> pd.DataFrame:
 
 
 init_db()
-
 
 # ---------------------------------------------------------------------------
 # خروجی اکسل استاندارد
@@ -777,6 +856,7 @@ def generate_excel_bytes() -> bytes:
 
 
 def generate_item_address_excel_bytes() -> bytes:
+    """خروجی اکسل اختصاصیِ «آدرس کالا»: نگاشت کد کالا ↔ آدرس ↔ تعداد (تک‌شیت، ساده و کاربردی)."""
     from openpyxl.styles import Font, PatternFill, Alignment
     from openpyxl.utils import get_column_letter
 
@@ -806,15 +886,14 @@ def generate_item_address_excel_bytes() -> bytes:
 
 
 def generate_activity_log_excel_bytes() -> bytes:
-
+    """خروجی اکسل «آخرین عملیات‌ها» — تا سقف ۵۰۰ رکورد (کل ظرفیت جدول activity_log)."""
     from openpyxl.styles import Font, PatternFill, Alignment
     from openpyxl.utils import get_column_letter
 
     activity_df = get_recent_activity_df(ACTIVITY_LOG_MAX_ROWS)
     display_df = pd.DataFrame({
         "کد کالا": activity_df["item_code"],
-        "نوع عملیات": activity_df["operation_type"].map({"IN": "ورود", "OUT": "خروج"}).fillna(
-                activity_df["operation_type"]),
+        "نوع عملیات": activity_df["operation_type"].map({"IN": "ورود", "OUT": "خروج"}).fillna(activity_df["operation_type"]),
         "تعداد": activity_df["quantity"],
         "تاریخ عملیات": activity_df["timestamp"].apply(to_jalali_str),
         "کاربر": activity_df["username"],
@@ -919,8 +998,8 @@ def decode_frame(image_bgr: np.ndarray):
         (x, y, w, h) = barcode.rect
         cv2.rectangle(image_bgr, (x, y), (x + w, y + h), (0, 200, 0), 3)
         cv2.putText(
-                image_bgr, f"{barcode.type}: {data}", (x, max(y - 10, 20)),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 200, 0), 2,
+            image_bgr, f"{barcode.type}: {data}", (x, max(y - 10, 20)),
+            cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 200, 0), 2,
         )
         results.append({"data": data, "type": barcode.type})
     return image_bgr, results
@@ -933,9 +1012,43 @@ def reset_scanner(state_key: str):
 
 
 SCAN_BURST_SECONDS = 1.2  # هر اجرای اسکریپت حداکثر این‌قدر منتظر بارکد می‌ماند، سپس رفرش می‌شود
-
-
 # (این کار باعث می‌شود دیالوگ‌های تایید/پیام موفقیت بلافاصله و بدون قفل‌شدن نمایش داده شوند)
+
+
+@st.cache_data(ttl=3600)
+def get_ice_servers():
+    """
+    تنظیمات سرورهای ICE (STUN/TURN) برای اتصال دوربین WebRTC.
+
+    روی لپ‌تاپ/سیستم شخصی معمولاً یک STUN ساده کافی است، ولی وقتی برنامه
+    روی یک هاست ابری (Hugging Face Spaces، Streamlit Cloud و...) اجراست،
+    خودِ سرور هم پشت NAT/فایروال است و بدون یک سرور TURN (رله‌ی واقعی
+    ترافیک تصویر)، اتصال دوربین اصلاً برقرار نمی‌شود — همان خطای
+    "ICE failed" / مشکل TURN-STUN که دیدید.
+
+    اگر Secrets مربوط به Twilio (TWILIO_ACCOUNT_SID / TWILIO_AUTH_TOKEN) در
+    st.secrets تنظیم شده باشد، از سرویس رسمی Twilio استفاده می‌شود (پایدارتر،
+    برای استفاده‌ی واقعی/پرترافیک پیشنهاد می‌شود). در غیر این صورت، به‌صورت
+    خودکار از یک سرویس TURN رایگان و عمومی (Open Relay Project) استفاده
+    می‌شود که نیاز به ثبت‌نام ندارد و برای شروع/تست کاملاً کافی است.
+    """
+    try:
+        account_sid = st.secrets["TWILIO_ACCOUNT_SID"]
+        auth_token = st.secrets["TWILIO_AUTH_TOKEN"]
+        from twilio.rest import Client
+        client = Client(account_sid, auth_token)
+        token = client.tokens.create()
+        return token.ice_servers
+    except Exception:
+        pass
+
+    # سرورهای رایگان و عمومی Open Relay Project (metered.ca) — بدون نیاز به ثبت‌نام
+    return [
+        {"urls": ["stun:stun.l.google.com:19302"]},
+        {"urls": ["turn:openrelay.metered.ca:80"], "username": "openrelayproject", "credential": "openrelayproject"},
+        {"urls": ["turn:openrelay.metered.ca:443"], "username": "openrelayproject", "credential": "openrelayproject"},
+        {"urls": ["turn:openrelay.metered.ca:443?transport=tcp"], "username": "openrelayproject", "credential": "openrelayproject"},
+    ]
 
 
 def realtime_barcode_scanner(state_key: str, prompt: str, start_label: str = "شروع اسکن"):
@@ -971,50 +1084,25 @@ def realtime_barcode_scanner(state_key: str, prompt: str, start_label: str = "ش
     st.html('<div class="scanner-frame">')
     st.caption(f"📷 {prompt}")
     webrtc_kwargs = dict(
-            key=f"scanner_{state_key}",
-            rtc_configuration={
-                "iceServers": [
-                    {"urls": "stun:stun.relay.metered.ca:80"},
-                    {
-                        "urls": "turn:global.relay.metered.ca:80",
-                        "username": "cd179119c0f24eb9b98b6502",
-                        "credential": "jUbUVq6QEjYf4vhL",
-                    },
-                    {
-                        "urls": "turn:global.relay.metered.ca:80?transport=tcp",
-                        "username": "cd179119c0f24eb9b98b6502",
-                        "credential": "jUbUVq6QEjYf4vhL",
-                    },
-                    {
-                        "urls": "turn:global.relay.metered.ca:443",
-                        "username": "cd179119c0f24eb9b98b6502",
-                        "credential": "jUbUVq6QEjYf4vhL",
-                    },
-                    {
-                        "urls": "turns:global.relay.metered.ca:443?transport=tcp",
-                        "username": "cd179119c0f24eb9b98b6502",
-                        "credential": "jUbUVq6QEjYf4vhL",
-                    },
-                ]
-
-            },
-            mode=WebRtcMode.SENDRECV,
-            video_processor_factory=_Processor,
-            media_stream_constraints={
-                "video": {"facingMode": {"ideal": "environment"}},
-                "audio": False,
-            },
-            async_processing=True,
+        key=f"scanner_{state_key}",
+        mode=WebRtcMode.SENDRECV,
+        video_processor_factory=_Processor,
+        media_stream_constraints={
+            "video": {"facingMode": {"ideal": "environment"}},
+            "audio": False,
+        },
+        async_processing=True,
+        rtc_configuration={"iceServers": get_ice_servers()},
     )
     try:
         # streamlit-webrtc از پارامتر translations برای تغییر متن دکمه‌ها پشتیبانی می‌کند
         ctx = webrtc_streamer(
-                **webrtc_kwargs,
-                translations={
-                    "start": start_label,
-                    "stop": "⏹️ پایان",
-                    "select_device": "📷 انتخاب دوربین",
-                },
+            **webrtc_kwargs,
+            translations={
+                "start": start_label,
+                "stop": "⏹️ پایان",
+                "select_device": "📷 انتخاب دوربین",
+            },
         )
     except TypeError:
         # نسخه‌ی نصب‌شده translations را پشتیبانی نمی‌کند؛ بدون آن اجرا شود
@@ -1027,7 +1115,7 @@ def realtime_barcode_scanner(state_key: str, prompt: str, start_label: str = "ش
     if st.session_state.get(pending_key):
         pending = st.session_state[pending_key]
         status_ph.html(
-                f"""<div class="card-success">
+            f"""<div class="card-success">
             ✅ <b>کد شناسایی شد</b><br>
             <b>نوع:</b> {pending['type']}<br>
             <b>محتوا:</b> {pending['data']}
@@ -1078,8 +1166,8 @@ def realtime_barcode_scanner(state_key: str, prompt: str, start_label: str = "ش
 # ---------------------------------------------------------------------------
 def render_live_inventory_section(key_prefix: str):
     st.html(
-            '<div class="card">'
-    )
+    '<div class="card">'
+)
     st.html('<h4 style="text-align:center;">📊 وضعیت زنده‌ی موجودی و آدرس‌ها</h4>')
 
     inv_df = get_inventory_display_df()
@@ -1087,28 +1175,28 @@ def render_live_inventory_section(key_prefix: str):
     m1, m2, m3 = st.columns(3)
     with m1:
         st.html(
-                f'<div class="metric-box"><h3>{len(inv_df)}</h3><span>ردیف موجودی</span></div>'
+            f'<div class="metric-box"><h3>{len(inv_df)}</h3><span>ردیف موجودی</span></div>'
         )
     with m2:
         total_qty = int(inv_df["تعداد"].sum()) if not inv_df.empty else 0
         st.html(
-                f'<div class="metric-box"><h3>{total_qty}</h3><span>مجموع تعداد کالا</span></div>'
-        )
+    f'<div class="metric-box"><h3>{total_qty}</h3><span>مجموع تعداد کالا</span></div>'
+)
     with m3:
         addr_count = int(inv_df["آدرس"].nunique()) if not inv_df.empty else 0
         st.html(
-                f'<div class="metric-box"><h3>{addr_count}</h3><span>آدرس‌های فعال</span></div>'
-        )
+    f'<div class="metric-box"><h3>{addr_count}</h3><span>آدرس‌های فعال</span></div>'
+)
 
     st.write("")
     search = ti(
-            "🔍 جستجو در کد کالا یا آدرس", key=f"{key_prefix}_inv_search",
-            placeholder="بخشی از کد کالا یا آدرس را تایپ کنید...",
+        "🔍 جستجو در کد کالا یا آدرس", key=f"{key_prefix}_inv_search",
+        placeholder="بخشی از کد کالا یا آدرس را تایپ کنید...",
     )
     if search:
         mask = (
-                inv_df["کد کالا"].str.contains(search, case=False, na=False)
-                | inv_df["آدرس"].str.contains(search, case=False, na=False)
+            inv_df["کد کالا"].str.contains(search, case=False, na=False)
+            | inv_df["آدرس"].str.contains(search, case=False, na=False)
         )
         view_df = inv_df[mask]
     else:
@@ -1121,8 +1209,8 @@ def render_live_inventory_section(key_prefix: str):
     else:
         render_html_table(view_df, header_color="#1565c0", row_bg="#f7faff")
     st.html(
-            "</div>"
-    )
+    "</div>"
+)
 
 
 # ---------------------------------------------------------------------------
@@ -1130,15 +1218,15 @@ def render_live_inventory_section(key_prefix: str):
 # ---------------------------------------------------------------------------
 def render_operations_count_chart():
     st.html(
-            '<div class="card">'
-    )
+    '<div class="card">'
+)
     header_col, control_col = st.columns([3, 1.4])
     with header_col:
         st.markdown("#### 📈 تعداد عملیات ورود و خروج")
     with control_col:
         granularity = st.selectbox(
-                "نمایش بر اساس", ["روزانه", "هفتگی", "ماهانه"],
-                key="ops_chart_granularity", label_visibility="collapsed",
+            "نمایش بر اساس", ["روزانه", "هفتگی", "ماهانه"],
+            key="ops_chart_granularity", label_visibility="collapsed",
         )
 
     tx_df = get_transactions_df()
@@ -1151,8 +1239,8 @@ def render_operations_count_chart():
     if not JALALI_AVAILABLE:
         st.caption("⚠️ برای نمایش این نمودار با تاریخ شمسی، کتابخانه‌ی `jdatetime` باید نصب باشد.")
         st.html(
-                "</div>"
-        )
+    "</div>"
+)
         return
 
     tx_df["dt"] = pd.to_datetime(tx_df["timestamp"], format="%Y-%m-%d %H:%M:%S", errors="coerce")
@@ -1169,17 +1257,15 @@ def render_operations_count_chart():
         def week_start(ts):
             days_since_sat = (ts.weekday() - 5) % 7  # هفته‌ی شمسی از شنبه شروع می‌شود
             return (ts - pd.Timedelta(days=days_since_sat)).date()
-
         tx_df["bucket_sort"] = tx_df["dt"].apply(week_start)
         tx_df["label"] = tx_df["bucket_sort"].apply(
-                lambda d: "هفته‌ی " + jdatetime.date.fromgregorian(date=d).strftime("%Y/%m/%d")
+            lambda d: "هفته‌ی " + jdatetime.date.fromgregorian(date=d).strftime("%Y/%m/%d")
         )
         max_buckets = 12
     else:  # ماهانه
         def jalali_ym(ts):
             jd = jalali_date_of(ts)
             return (jd.year, jd.month)
-
         tx_df["bucket_sort"] = tx_df["dt"].apply(jalali_ym)
         tx_df["label"] = tx_df["bucket_sort"].apply(lambda t: f"{t[0]}/{t[1]:02d}")
         max_buckets = 12
@@ -1196,14 +1282,14 @@ def render_operations_count_chart():
     try:
         import plotly.express as px
         fig = px.bar(
-                grouped, x="label", y="تعداد", color="نوع عملیات", barmode="group",
-                color_discrete_map={"ورود": "#0d47a1", "خروج": "#13BFFD"},
+            grouped, x="label", y="تعداد", color="نوع عملیات", barmode="group",
+            color_discrete_map={"ورود": "#0d47a1", "خروج": "#13BFFD"},
         )
         fig.update_layout(
-                xaxis_title="", yaxis_title="تعداد عملیات",
-                legend_title="", font=dict(family="Vazirmatn, sans-serif"),
-                margin=dict(l=10, r=10, t=10, b=10), height=380,
-                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+            xaxis_title="", yaxis_title="تعداد عملیات",
+            legend_title="", font=dict(family="Vazirmatn, sans-serif"),
+            margin=dict(l=10, r=10, t=10, b=10), height=380,
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
         )
         fig.update_xaxes(categoryorder="array", categoryarray=ordered_labels)
         st.plotly_chart(fig, width="stretch")
@@ -1211,8 +1297,8 @@ def render_operations_count_chart():
         st.error("برای نمایش نمودار اینتراکتیو: `pip install plotly`")
 
     st.html(
-            "</div>"
-    )
+    "</div>"
+)
 
 
 # ---------------------------------------------------------------------------
@@ -1223,20 +1309,20 @@ def render_html_table(df: pd.DataFrame, header_color: str, row_bg: str):
     if df.empty:
         return
     headers = "".join(
-            f"<th style='padding:10px 14px;background:{header_color};color:#fff;"
-            f"text-align:center;white-space:nowrap;'>{col}</th>"
-            for col in df.columns
+        f"<th style='padding:10px 14px;background:{header_color};color:#fff;"
+        f"text-align:center;white-space:nowrap;'>{col}</th>"
+        for col in df.columns
     )
     rows_html = ""
     for _, r in df.iterrows():
         cells = "".join(
-                f"<td style='padding:9px 14px;text-align:center;border-bottom:1px solid rgba(0,0,0,0.06);'>{r[c]}</td>"
-                for c in df.columns
+            f"<td style='padding:9px 14px;text-align:center;border-bottom:1px solid rgba(0,0,0,0.06);'>{r[c]}</td>"
+            for c in df.columns
         )
         rows_html += f"<tr style='background:{row_bg};'>{cells}</tr>"
 
     st.html(
-            f"""
+    f"""
         <div style="overflow-x:auto;border-radius:14px;box-shadow:0 2px 10px rgba(0,0,0,0.06);margin-bottom:6px;">
         <table style="width:100%;border-collapse:collapse;direction:rtl;font-family:'Vazirmatn',sans-serif;font-size:0.92rem;">
             <thead><tr>{headers}</tr></thead>
@@ -1244,7 +1330,7 @@ def render_html_table(df: pd.DataFrame, header_color: str, row_bg: str):
         </table>
         </div>
         """
-    )
+)
 
 
 def guess_column(columns, keywords):
@@ -1273,13 +1359,13 @@ def compare_system_file_with_db(file_df: pd.DataFrame, item_col: str, qty_col: s
     if address_col:
         db_group = db_df.groupby(["item_code", "address_code"], as_index=False)["quantity"].sum()
         merged = file_df.merge(
-                db_group, left_on=[item_col, address_col], right_on=["item_code", "address_code"],
-                how="left", indicator=True,
+            db_group, left_on=[item_col, address_col], right_on=["item_code", "address_code"],
+            how="left", indicator=True,
         )
     else:
         db_group = db_df.groupby("item_code", as_index=False)["quantity"].sum()
         merged = file_df.merge(
-                db_group, left_on=item_col, right_on="item_code", how="left", indicator=True,
+            db_group, left_on=item_col, right_on="item_code", how="left", indicator=True,
         )
 
     merged["quantity"] = merged["quantity"].fillna(0).astype(int)
@@ -1328,14 +1414,14 @@ def login_page():
     render_logo(height_px=110, align="center")
 
     st.html(
-            f"""
+    f"""
         <div class="login-wrapper">
             <div class="login-title">{APP_TITLE}</div>
             <div class="app-subtitle" style="margin-bottom:12px;">{APP_SUBTITLE}</div>
             <div class="login-sub">برای ورود، نام کاربری و رمز عبور را وارد کنید</div>
         </div>
         """
-    )
+)
     _, mid, _ = st.columns([1, 1.1, 1])
     with mid:
         tab_login, tab_signup = st.tabs(["🔐 ورود", "🆕 ثبت‌نام کاربر جدید"])
@@ -1344,8 +1430,8 @@ def login_page():
             with st.form("login_form", border=False):
                 username = ti("نام کاربری (۵ رقم عددی)", placeholder="مثلاً 12345", key="login_username", max_chars=5)
                 password = ti(
-                        "رمز عبور", type="password", placeholder="رمز عبور",
-                        key="login_password", autocomplete="new-password",
+                    "رمز عبور", type="password", placeholder="رمز عبور",
+                    key="login_password", autocomplete="new-password",
                 )
                 submitted = st.form_submit_button("ورود 🔐", width="stretch")
 
@@ -1364,16 +1450,16 @@ def login_page():
         with tab_signup:
             with st.form("signup_form", border=False):
                 new_username = ti(
-                        "نام کاربری جدید (۵ رقم عددی)", placeholder="مثلاً 54321",
-                        key="signup_username", max_chars=5,
+                    "نام کاربری جدید (۵ رقم عددی)", placeholder="مثلاً 54321",
+                    key="signup_username", max_chars=5,
                 )
                 new_password = ti(
-                        "رمز عبور", type="password", placeholder="رمز عبور دلخواه (بدون محدودیت)",
-                        key="signup_password", autocomplete="new-password",
+                    "رمز عبور", type="password", placeholder="رمز عبور دلخواه (بدون محدودیت)",
+                    key="signup_password", autocomplete="new-password",
                 )
                 new_password_confirm = ti(
-                        "تکرار رمز عبور", type="password", placeholder="رمز عبور را دوباره وارد کنید",
-                        key="signup_password_confirm", autocomplete="new-password",
+                    "تکرار رمز عبور", type="password", placeholder="رمز عبور را دوباره وارد کنید",
+                    key="signup_password_confirm", autocomplete="new-password",
                 )
                 signup_submitted = st.form_submit_button("ثبت‌نام ✅", width="stretch")
 
@@ -1405,10 +1491,10 @@ def require_login():
 @st.dialog("✅ تایید آدرس")
 def confirm_entry_address_dialog(code: str):
     st.html(
-            f"""<div class="card-success" style="margin-top:-8px;">
+    f"""<div class="card-success" style="margin-top:-8px;">
         📍 <b>آدرس شناسایی‌شده</b><br><span style="font-size:1.3rem;">{code}</span>
         </div>"""
-    )
+)
     st.caption("آیا این آدرس تایید و برای ورود کالا ذخیره شود؟")
     c1, c2 = st.columns(2)
     with c1:
@@ -1426,22 +1512,22 @@ def confirm_entry_address_dialog(code: str):
 @st.dialog("✅ تایید کالا و تعداد ورودی")
 def confirm_entry_item_dialog(code: str, address: str):
     st.html(
-            f"""<div class="card-success" style="margin-top:-8px;">
+    f"""<div class="card-success" style="margin-top:-8px;">
         📦 <b>کد کالای شناسایی‌شده</b><br><span style="font-size:1.3rem;">{code}</span>
         </div>"""
-    )
+)
 
     existing = get_item_row(code)
     if existing and existing["address_code"] != address:
         # کالا قبلاً در آدرس دیگری ثبت شده — هر کد کالا فقط می‌تواند در یک آدرس باشد
         st.html(
-                f"""<div class="card-warning">
+    f"""<div class="card-warning">
             ⚠️ این کالا از قبل در آدرس <b>{existing['address_code']}</b> با
             <b>{existing['quantity']}</b> عدد موجود است.<br>
             چون هر کالا فقط می‌تواند در یک آدرس باشد، تعداد واردشده به همان
             آدرس ({existing['address_code']}) افزوده خواهد شد — نه آدرس فعلی این جلسه.
             </div>"""
-        )
+)
         target_address = existing["address_code"]
         st.caption("برای انتقال این کالا به آدرس دیگر، از گزینه‌ی «تغییر آدرس کالا» استفاده کنید.")
     elif existing:
@@ -1476,10 +1562,10 @@ def confirm_entry_item_dialog(code: str, address: str):
 def ask_another_item_dialog():
     pending = st.session_state.get("entry_pending_item", {})
     st.html(
-            f"""<div class="card-success" style="margin-top:-8px;">
+    f"""<div class="card-success" style="margin-top:-8px;">
         📦 <b>{pending.get('code')}</b> — {pending.get('qty')} عدد در آدرس {pending.get('address')}
         </div>"""
-    )
+)
     st.write("آیا می‌خواهید کالای جدیدی در همین آدرس معرفی کنید؟")
     c1, c2 = st.columns(2)
     with c1:
@@ -1503,13 +1589,13 @@ def ask_another_item_dialog():
 def confirm_exit_dialog(row: dict):
     current_qty = int(row["quantity"])
     st.html(
-            f"""<div class="card-success" style="margin-top:-8px;">
+    f"""<div class="card-success" style="margin-top:-8px;">
         📦 <b>{row['item_code']}</b><br>📍 آدرس: {row['address_code']}<br>موجودی فعلی: {current_qty} عدد
         </div>"""
-    )
+)
     qty_out = st.number_input(
-            "🔢 تعداد خروجی", min_value=0, max_value=current_qty, value=0, step=1,
-            key=f"dlg_exit_qty_{row['id']}",
+        "🔢 تعداد خروجی", min_value=0, max_value=current_qty, value=0, step=1,
+        key=f"dlg_exit_qty_{row['id']}",
     )
     c1, c2 = st.columns(2)
     with c1:
@@ -1536,10 +1622,10 @@ def confirm_exit_dialog(row: dict):
 def ask_another_exit_dialog():
     pending = st.session_state.get("exit_pending_item", {})
     st.html(
-            f"""<div class="card-success" style="margin-top:-8px;">
+    f"""<div class="card-success" style="margin-top:-8px;">
         📦 <b>{pending.get('item_code')}</b> — {pending.get('quantity')} عدد از آدرس {pending.get('address_code')}
         </div>"""
-    )
+)
     st.write("آیا کالای دیگری هم مدنظر هست برای خروج؟")
     c1, c2 = st.columns(2)
     with c1:
@@ -1565,19 +1651,19 @@ def confirm_addrchg_item_dialog(item_code: str):
 
     if not row:
         st.html(
-                f'<div class="card-warning">⚠️ کد کالای «{item_code}» در دیتابیس یافت نشد '
-                f"(یا هنوز آدرس‌دهی نشده، یا قبلاً از انبار خارج شده است).</div>"
-        )
+    f'<div class="card-warning">⚠️ کد کالای «{item_code}» در دیتابیس یافت نشد '
+            f"(یا هنوز آدرس‌دهی نشده، یا قبلاً از انبار خارج شده است).</div>"
+)
         if st.button("باشه، اسکن مجدد", key="dlg_addrchg_none", width="stretch"):
             reset_scanner("addrchg_item")
             st.rerun()
         return
 
     st.html(
-            f"""<div class="card-success" style="margin-top:-4px;">
+    f"""<div class="card-success" style="margin-top:-4px;">
         📦 <b>{item_code}</b><br>📍 آدرس فعلی: {row['address_code']}<br>موجودی: {row['quantity']} عدد
         </div>"""
-    )
+)
     c1, c2 = st.columns(2)
     with c1:
         if st.button("✅ تایید و ادامه به اسکن آدرس جدید", key="dlg_addrchg_confirm_item", width="stretch"):
@@ -1596,8 +1682,8 @@ def confirm_addrchg_newaddr_dialog(item_code: str, new_address: str):
     row = get_item_row(item_code)
     if not row:
         st.html(
-                '<div class="card-warning">⚠️ این کالا دیگر در دیتابیس موجود نیست.</div>'
-        )
+    '<div class="card-warning">⚠️ این کالا دیگر در دیتابیس موجود نیست.</div>'
+)
         if st.button("باشه", key="dlg_addrchg_gone", width="stretch"):
             reset_scanner("addrchg_newaddr")
             for k in ("show_address_change", "addrchg_stage", "addrchg_selected_item"):
@@ -1613,11 +1699,11 @@ def confirm_addrchg_newaddr_dialog(item_code: str, new_address: str):
         return
 
     st.html(
-            f"""<div class="card-success" style="margin-top:-8px;">
+    f"""<div class="card-success" style="margin-top:-8px;">
         📦 <b>{item_code}</b> ({row['quantity']} عدد)<br>
         📍 {row['address_code']} &nbsp;➡️&nbsp; <b>{new_address}</b>
         </div>"""
-    )
+)
     st.caption("چون هر کالا فقط می‌تواند در یک آدرس باشد، کل موجودی این کالا جابه‌جا می‌شود.")
     c1, c2 = st.columns(2)
     with c1:
@@ -1653,7 +1739,7 @@ def render_address_change_section():
     if stage == "item":
         st.markdown("#### اسکن کد کالایی که می‌خواهید جابه‌جا کنید")
         scanned = realtime_barcode_scanner(
-                "addrchg_item", "بارکد کالا را جلوی دوربین بگیرید", start_label="𝄃𝄂𝄀𝄁𝄃𝄂𝄂𝄃 اسکن بارکد کالا",
+            "addrchg_item", "بارکد کالا را جلوی دوربین بگیرید", start_label="📦 اسکن بارکد کالا",
         )
         if scanned:
             confirm_addrchg_item_dialog(scanned["data"])
@@ -1661,11 +1747,10 @@ def render_address_change_section():
     else:  # stage == "newaddr"
         item_code = st.session_state.get("addrchg_selected_item")
         row = get_item_row(item_code) or {}
-        st.info(
-            f"📦 کالا: **{item_code}**  |  📍 آدرس فعلی: **{row.get('address_code')}**  |  موجودی: {row.get('quantity')}")
+        st.info(f"📦 کالا: **{item_code}**  |  📍 آدرس فعلی: **{row.get('address_code')}**  |  موجودی: {row.get('quantity')}")
         st.markdown("#### اسکن بارکد آدرس جدید")
         scanned = realtime_barcode_scanner(
-                "addrchg_newaddr", "بارکد آدرس جدید را جلوی دوربین بگیرید", start_label="𝄃𝄂𝄀𝄁𝄃𝄂𝄂𝄃 اسکن آدرس",
+            "addrchg_newaddr", "بارکد آدرس جدید را جلوی دوربین بگیرید", start_label="📍 اسکن آدرس",
         )
         if scanned:
             confirm_addrchg_newaddr_dialog(item_code, scanned["data"])
@@ -1707,10 +1792,9 @@ def page_entry():
 
     # ---- entry_mode == "entry" ----
     st.html('<div class="card">')
-    st.markdown("### 📦 ورود کالا")
 
-    top_c1, top_c2 = st.columns([3, 1])
-    with top_c2:
+    back_col, _ = st.columns([1, 3])
+    with back_col:
         if st.button("⬅️ بازگشت", key="entry_mode_back", width="stretch"):
             reset_scanner("entry_address")
             reset_scanner("entry_item")
@@ -1740,7 +1824,7 @@ def page_entry():
     if stage == "address":
         st.markdown("### اسکن بارکد آدرس")
         scanned = realtime_barcode_scanner(
-                "entry_address", "بارکد آدرس قفسه را جلوی دوربین بگیرید", start_label="𝄃𝄂𝄀𝄁𝄃𝄂𝄂𝄃 اسکن آدرس",
+            "entry_address", "بارکد آدرس قفسه را جلوی دوربین بگیرید", start_label="📍 اسکن آدرس",
         )
         if scanned:
             confirm_entry_address_dialog(scanned["data"])
@@ -1752,7 +1836,7 @@ def page_entry():
             ask_another_item_dialog()
         else:
             scanned = realtime_barcode_scanner(
-                    "entry_item", "بارکد کالا را جلوی دوربین بگیرید", start_label="𝄃𝄂𝄀𝄁𝄃𝄂𝄂𝄃 اسکن بارکد کالا",
+                "entry_item", "بارکد کالا را جلوی دوربین بگیرید", start_label="📦 اسکن بارکد کالا",
             )
             if scanned:
                 confirm_entry_item_dialog(scanned["data"], st.session_state.entry_address_code)
@@ -1783,8 +1867,8 @@ def page_entry():
 # ---------------------------------------------------------------------------
 def page_inventory():
     st.html(
-            '<div class="card">'
-    )
+    '<div class="card">'
+)
     st.markdown("### 📋 موجودی / فیزیک کالا")
     st.caption("فایل اکسل موجودی سیستمی را آپلود کنید تا با دیتابیس انبار مقایسه شود.")
 
@@ -1806,20 +1890,20 @@ def page_inventory():
             c1, c2, c3 = st.columns(3)
             with c1:
                 item_col = st.selectbox(
-                        "ستون «کد کالا»", options=cols,
-                        index=cols.index(item_guess) if item_guess in cols else 0, key="map_item_col",
+                    "ستون «کد کالا»", options=cols,
+                    index=cols.index(item_guess) if item_guess in cols else 0, key="map_item_col",
                 )
             with c2:
                 qty_col = st.selectbox(
-                        "ستون «تعداد»", options=cols,
-                        index=cols.index(qty_guess) if qty_guess in cols else 0, key="map_qty_col",
+                    "ستون «تعداد»", options=cols,
+                    index=cols.index(qty_guess) if qty_guess in cols else 0, key="map_qty_col",
                 )
             with c3:
                 addr_options = ["— استفاده نشود —"] + cols
                 addr_default = addr_guess if addr_guess in cols else "— استفاده نشود —"
                 addr_choice = st.selectbox(
-                        "ستون «آدرس» (اختیاری)", options=addr_options,
-                        index=addr_options.index(addr_default), key="map_addr_col",
+                    "ستون «آدرس» (اختیاری)", options=addr_options,
+                    index=addr_options.index(addr_default), key="map_addr_col",
                 )
             address_col = None if addr_choice == "— استفاده نشود —" else addr_choice
 
@@ -1835,11 +1919,11 @@ def page_inventory():
     st.markdown("#### 📥 دانلود اکسل آدرس کالا")
     st.caption("خروجی استاندارد Excel از نگاشت کد کالا ↔ آدرس ↔ تعداد فعلی، آماده برای چاپ یا آرشیو.")
     st.download_button(
-            label="📊 دانلود اکسل آدرس کالا (.xlsx)",
-            data=generate_item_address_excel_bytes(),
-            file_name=f"item_address_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            key="item_address_download", width="stretch",
+        label="📊 دانلود اکسل آدرس کالا (.xlsx)",
+        data=generate_item_address_excel_bytes(),
+        file_name=f"item_address_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        key="item_address_download", width="stretch",
     )
 
     if st.session_state.get("phys_compared"):
@@ -1849,18 +1933,18 @@ def page_inventory():
         m1, m2 = st.columns(2)
         with m1:
             st.html(
-                    f'<div class="metric-box" style="border-bottom-color:#e6a817;">'
-                    f'<h3>{len(mismatch_df)}</h3><span>مورد مغایر (تعداد متفاوت)</span></div>'
-            )
+    f'<div class="metric-box" style="border-bottom-color:#e6a817;">'
+                f'<h3>{len(mismatch_df)}</h3><span>مورد مغایر (تعداد متفاوت)</span></div>'
+)
         with m2:
             st.html(
-                    f'<div class="metric-box" style="border-bottom-color:#d9534f;">'
-                    f'<h3>{len(missing_df)}</h3><span>در دیتابیس یافت نشد</span></div>'
-            )
+    f'<div class="metric-box" style="border-bottom-color:#d9534f;">'
+                f'<h3>{len(missing_df)}</h3><span>در دیتابیس یافت نشد</span></div>'
+)
 
         st.html(
-                '<div class="card">'
-        )
+    '<div class="card">'
+)
         st.markdown("#### 🟡 مغایرت تعداد (فایل سیستم ≠ دیتابیس)")
         st.caption("یعنی این کالا هم در فایل سیستم و هم در دیتابیس هست، ولی تعدادشان یکی نیست.")
         if mismatch_df.empty:
@@ -1870,11 +1954,10 @@ def page_inventory():
         st.html("</div>")
 
         st.html(
-                '<div class="card">'
-        )
+    '<div class="card">'
+)
         st.markdown("#### 🔴 در فایل سیستم هست ولی در دیتابیس نیست")
-        st.caption(
-            "یعنی این کالا یا هنوز آدرس‌دهی نشده، یا از انبار خارج شده ولی رسید سیستمی خروج برایش صادر نشده است.")
+        st.caption("یعنی این کالا یا هنوز آدرس‌دهی نشده، یا از انبار خارج شده ولی رسید سیستمی خروج برایش صادر نشده است.")
         if missing_df.empty:
             st.success("✅ همه‌ی اقلام فایل سیستم در دیتابیس موجودند.")
         else:
@@ -1891,8 +1974,8 @@ def page_exit():
     st.session_state.setdefault("exit_stage", "scanning")
 
     st.html(
-            '<div class="card">'
-    )
+    '<div class="card">'
+)
     st.markdown("### 🚚 خروج کالا از انبار")
 
     if st.session_state.exit_stage == "done":
@@ -1910,19 +1993,19 @@ def page_exit():
         # اسکنر موقتاً متوقف است تا کاربر به سوال «کالای دیگری برای خروج؟» پاسخ دهد
         ask_another_exit_dialog()
         st.html(
-                "</div>"
-        )
+    "</div>"
+)
         render_live_inventory_section("exit")
         return
 
     scanned = realtime_barcode_scanner(
-            "exit_scan", "بارکد آدرس یا کالا را جلوی دوربین بگیرید", start_label="🔍 اسکن آدرس یا بارکد کالا",
+        "exit_scan", "بارکد آدرس یا کالا را جلوی دوربین بگیرید", start_label="🔍 اسکن آدرس یا بارکد کالا",
     )
 
     if not scanned:
         st.html(
-                "</div>"
-        )
+    "</div>"
+)
         render_live_inventory_section("exit")
         return
 
@@ -1933,26 +2016,26 @@ def page_exit():
     if not by_item.empty:
         candidates = by_item
         st.html(
-                f'<div class="card-success">✅ کد کالا شناسایی شد: <b>{code}</b></div>'
-        )
+    f'<div class="card-success">✅ کد کالا شناسایی شد: <b>{code}</b></div>'
+)
     elif not by_address.empty:
         candidates = by_address
         st.html(
-                f'<div class="card-success">✅ کد آدرس شناسایی شد: <b>{code}</b></div>'
-        )
+    f'<div class="card-success">✅ کد آدرس شناسایی شد: <b>{code}</b></div>'
+)
     else:
         candidates = pd.DataFrame()
 
     if candidates.empty:
         st.html(
-                f'<div class="card-warning">⚠️ کدی با مقدار «{code}» در انبار (به‌عنوان کالا یا آدرس) یافت نشد.</div>'
-        )
+    f'<div class="card-warning">⚠️ کدی با مقدار «{code}» در انبار (به‌عنوان کالا یا آدرس) یافت نشد.</div>'
+)
         if st.button("🔄 اسکن مجدد", key="exit_rescan_empty"):
             reset_scanner("exit_scan")
             st.rerun()
         st.html(
-                "</div>"
-        )
+    "</div>"
+)
         render_live_inventory_section("exit")
         return
 
@@ -1970,8 +2053,8 @@ def page_exit():
         confirm_exit_dialog(row.to_dict())
 
     st.html(
-            "</div>"
-    )
+    "</div>"
+)
     render_live_inventory_section("exit")
 
 
@@ -1980,8 +2063,8 @@ def page_exit():
 # ---------------------------------------------------------------------------
 def page_analysis():
     st.html(
-            '<div class="card">'
-    )
+    '<div class="card">'
+)
     st.markdown("### 📊 تحلیل داده")
 
     inv_df = get_inventory_raw_df()
@@ -1990,31 +2073,31 @@ def page_analysis():
     c1, c2, c3, c4 = st.columns(4)
     with c1:
         st.html(
-                f'<div class="metric-box-big"><h3>{int(inv_df["quantity"].sum()) if not inv_df.empty else 0}</h3><span>مجموع موجودی</span></div>'
+            f'<div class="metric-box-big"><h3>{int(inv_df["quantity"].sum()) if not inv_df.empty else 0}</h3><span>مجموع موجودی</span></div>'
         )
     with c2:
         st.html(
-                f'<div class="metric-box-big"><h3>{inv_df["address_code"].nunique() if not inv_df.empty else 0}</h3><span>آدرس فعال</span></div>'
-        )
+    f'<div class="metric-box-big"><h3>{inv_df["address_code"].nunique() if not inv_df.empty else 0}</h3><span>آدرس فعال</span></div>'
+)
     with c3:
         in_count = int((tx_df["type"] == "IN").sum()) if not tx_df.empty else 0
         st.html(
-                f'<div class="metric-box-big"><h3>{in_count}</h3><span>تعداد تراکنش ورود</span></div>'
-        )
+    f'<div class="metric-box-big"><h3>{in_count}</h3><span>تعداد تراکنش ورود</span></div>'
+)
     with c4:
         out_count = int((tx_df["type"] == "OUT").sum()) if not tx_df.empty else 0
         st.html(
-                f'<div class="metric-box-big"><h3>{out_count}</h3><span>تعداد تراکنش خروج</span></div>'
-        )
+    f'<div class="metric-box-big"><h3>{out_count}</h3><span>تعداد تراکنش خروج</span></div>'
+)
     st.html(
-            "</div>"
-    )
+    "</div>"
+)
 
     render_operations_count_chart()
 
     st.html(
-            '<div class="card">'
-    )
+    '<div class="card">'
+)
     st.markdown("#### 🕒 آخرین عملیات‌ها (حداکثر ۱۰ رکورد آخر)")
     st.caption("این جدول از یک بانک اطلاعاتی جداگانه (حداکثر ۵۰۰ رکورد آخر) خوانده می‌شود.")
 
@@ -2024,8 +2107,7 @@ def page_analysis():
     else:
         display_df = pd.DataFrame({
             "کد کالا": activity_df["item_code"],
-            "نوع عملیات": activity_df["operation_type"].map({"IN": "ورود", "OUT": "خروج"}).fillna(
-                    activity_df["operation_type"]),
+            "نوع عملیات": activity_df["operation_type"].map({"IN": "ورود", "OUT": "خروج"}).fillna(activity_df["operation_type"]),
             "تعداد": activity_df["quantity"],
             "تاریخ عملیات": activity_df["timestamp"].apply(to_jalali_str),
             "کاربر": activity_df["username"],
@@ -2034,26 +2116,26 @@ def page_analysis():
 
     st.write("")
     st.download_button(
-            label=f"⬇️ دانلود تا ۵۰۰ عملیات اخیر (Excel)",
-            data=generate_activity_log_excel_bytes(),
-            file_name=f"activity_log_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            key="activity_log_download", width="stretch",
-            disabled=activity_df.empty,
+        label=f"⬇️ دانلود تا ۵۰۰ عملیات اخیر (Excel)",
+        data=generate_activity_log_excel_bytes(),
+        file_name=f"activity_log_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        key="activity_log_download", width="stretch",
+        disabled=activity_df.empty,
     )
     st.html("</div>")
 
     st.html(
-            '<div class="download-card">'
-    )
+    '<div class="download-card">'
+)
     st.markdown("#### 📥 دانلود گزارش کامل اکسل")
     st.markdown("خروجی استاندارد Excel شامل «موجودی فعلی» و «تاریخچه‌ی کامل تراکنش‌ها»، آماده برای ارسال یا آرشیو.")
     st.download_button(
-            label="📊 دانلود فایل اکسل (.xlsx)",
-            data=generate_excel_bytes(),
-            file_name=f"warehouse_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            width="stretch",
+        label="📊 دانلود فایل اکسل (.xlsx)",
+        data=generate_excel_bytes(),
+        file_name=f"warehouse_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        width="stretch",
     )
     st.html("</div>")
 
@@ -2066,27 +2148,23 @@ kill_browser_autofill()
 
 top_logo, top_title, top_user = st.columns([1, 3, 1.2])
 with top_logo:
-    render_logo(height_px=100)
+    render_logo(height_px=52)
 with top_title:
     st.html(
-            f"""<div class="app-title-wrap">
+    f"""<div class="app-title-wrap">
         <h1>{APP_TITLE}</h1>
         <div class="app-subtitle">{APP_SUBTITLE}</div>
         </div>"""
-    )
+)
 with top_user:
     st.write("")
     st.html(
-            f'<div style="text-align:center;margin-bottom:10px;">👤 <b>{st.session_state.username}</b></div>'
-    )
+    f'<div style="text-align:center;margin-bottom:10px;">👤 <b>{st.session_state.username}</b></div>'
+)
     if st.button("خروج از حساب 🚪", key="logout_btn", width="stretch"):
         st.session_state.logged_in = False
         st.rerun()
 
-
-st.html(
-        '<div class="card">'
-)
 # ---------------------------------------------------------------------------
 # منوی افقی پیشرفته
 # ---------------------------------------------------------------------------
@@ -2095,31 +2173,30 @@ MENU_ICONS = ["box-seam-fill", "clipboard2-data-fill", "truck", "bar-chart-line-
 
 try:
     from streamlit_option_menu import option_menu
-
     selected = option_menu(
-            menu_title=None,
-            options=MENU_OPTIONS,
-            icons=MENU_ICONS,
-            orientation="horizontal",
-            key="main_menu",
-            styles={
-                "container": {
-                    "padding": "8px", "background-color": "radial-gradient(circle at top right, #eaf2fb 0%, #f7faff 45%, #e3edfa 100%)", "border-radius": "16px",
-                    "box-shadow": "0 4px 16px rgba(13,71,161,0.10)", "direction": "rtl",
-                    "overflow-x": "auto", "flex-wrap": "nowrap",
-                },
-                "icon": {"font-size": "17px"},
-                "nav-link": {
-                    "font-size": "14.5px", "font-weight": "600", "text-align": "center",
-                    "margin": "0 3px", "border-radius": "12px", "padding": "11px 8px",
-                    "direction": "rtl", "white-space": "nowrap", "flex-shrink": "0",
-                    "color": "#1565c0", "--hover-color": "#eaf2fb",
-                },
-                "nav-link-selected": {
-                    "background": "linear-gradient(135deg, #0d47a1 0%, #1976d2 100%)",
-                    "color": "white", "font-weight": "700",
-                },
+        menu_title=None,
+        options=MENU_OPTIONS,
+        icons=MENU_ICONS,
+        orientation="horizontal",
+        key="main_menu",
+        styles={
+            "container": {
+                "padding": "8px", "background-color": "#ffffff", "border-radius": "16px",
+                "box-shadow": "0 4px 16px rgba(13,71,161,0.10)", "direction": "rtl",
+                "overflow-x": "auto", "flex-wrap": "nowrap",
             },
+            "icon": {"font-size": "17px"},
+            "nav-link": {
+                "font-size": "14.5px", "font-weight": "600", "text-align": "center",
+                "margin": "0 3px", "border-radius": "12px", "padding": "11px 8px",
+                "direction": "rtl", "white-space": "nowrap", "flex-shrink": "0",
+                "color": "#1565c0", "--hover-color": "#eaf2fb",
+            },
+            "nav-link-selected": {
+                "background": "linear-gradient(135deg, #0d47a1 0%, #1976d2 100%)",
+                "color": "white", "font-weight": "700",
+            },
+        },
     )
 except ImportError:
     st.warning("برای منوی پیشرفته: `pip install streamlit-option-menu`")
