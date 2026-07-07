@@ -69,15 +69,16 @@ except ImportError:
 # ---------------------------------------------------------------------------
 # تنظیمات کلی صفحه
 # ---------------------------------------------------------------------------
+ICON_PATH = "icon.ico"
 st.set_page_config(
     page_title="انبار هوشمند",
-    page_icon="🏬",
+    page_icon=ICON_PATH,
     layout="wide",
     initial_sidebar_state="collapsed",
 )
 
-APP_TITLE = "🏬 انبار هوشمند"
-APP_SUBTITLE = "با افتخار طرحی از محمدرضا محمدزاده"
+APP_TITLE = "◝انبار هوشمند◟"
+APP_SUBTITLE = "├با افتخار طرحی از محمدرضا محمدزاده┤"
 
 # مسیر فایل لوگو — کافی است فایل logo.png را کنار همین اسکریپت قرار دهید.
 LOGO_PATH = "logo.png"
@@ -109,7 +110,7 @@ st.html(
     html, body, [class*="css"]  { font-family: 'Vazirmatn', sans-serif; }
     .main, .block-container { direction: rtl; }
     .stApp {
-        background: radial-gradient(circle at top right, #eaf2fb 0%, #f7faff 45%, #e3edfa 100%);
+        background: white;
     }
     p, span, label, div { direction: rtl; text-align: right; }
 
@@ -121,8 +122,8 @@ st.html(
     h4 { font-size: 1.08rem; font-weight: 600; color: #1a4971; }
 
     /* عنوان اصلی برنامه — وسط‌چین و در بالای صفحه */
-    .app-title-wrap { text-align: center; padding: 4px 0 10px 0; }
-    .app-title-wrap h1 { font-size: 2.3rem; margin: 0; }
+    .app-title-wrap { text-align: center; padding: 4px 0 10px 0; margin-right: 80px}
+    .app-title-wrap h1 { text-align: center;font-size: 2.3rem; margin-bottom:20px; }
     .app-subtitle { text-align: center; color: #5b6b82; font-size: 0.85rem; font-weight: 500; margin-top: -2px; }
 
     /* لوگو — بدون شادو، فقط خودِ تصویر */
@@ -134,12 +135,7 @@ st.html(
     .logo-wrap img:hover { transform: scale(1.03); }
 
     .card {
-        background: #ffffff;
-        border-radius: 16px;
-        padding: 22px 26px;
-        box-shadow: 0 4px 18px rgba(13, 71, 161, 0.08);
-        margin-bottom: 16px;
-        border-top: 3px solid var(--brand-blue-light);
+border: none !important; border-top: 1px dashed rgba(13,71,161,0.35) !important; margin: 14px 0 !important; background: none !important;
     }
     .card-success {
         background: #eafaf0;
@@ -1753,7 +1749,9 @@ def confirm_addrchg_newaddr_dialog(item_code: str, new_address: str):
 
 def render_address_change_section():
     """بخش «تغییر آدرس کالا»: جابه‌جایی یک کالای موجود به آدرس جدید در انبار."""
-    st.html('<div class="card">')
+    st.html(
+            "</br> </br>"
+    )
     st.markdown("### 🔀 تغییر آدرس کالا")
 
     stage = st.session_state.get("addrchg_stage", "item")
@@ -1799,7 +1797,9 @@ def page_entry():
 
     # ---- انتخاب اولیه: ورود کالا یا تغییر آدرس (دو عملیات هم‌سطح) ----
     if st.session_state.entry_mode is None:
-        st.html('<div class="card">')
+        st.html(
+                "</br> </br>"
+        )
         st.markdown("### چه عملیاتی می‌خواهید انجام دهید؟")
         c1, c2 = st.columns(2)
         with c1:
@@ -1822,10 +1822,12 @@ def page_entry():
         return
 
     # ---- entry_mode == "entry" ----
-    st.html('<div class="card">')
-
-    back_col, _ = st.columns([1, 3])
-    with back_col:
+    st.html(
+            "</br> </br>"
+    )
+    st.markdown("### 📦 ورود کالا ")
+    c1 , c2 = st.columns([3, 1])
+    with c2:
         if st.button("⬅️ بازگشت", key="entry_mode_back", width="stretch"):
             reset_scanner("entry_address")
             reset_scanner("entry_item")
@@ -1898,8 +1900,8 @@ def page_entry():
 # ---------------------------------------------------------------------------
 def page_inventory():
     st.html(
-    '<div class="card">'
-)
+            "</br> </br>"
+    )
     st.markdown("### 📋 موجودی / فیزیک کالا")
     st.caption("فایل اکسل موجودی سیستمی را آپلود کنید تا با دیتابیس انبار مقایسه شود.")
 
@@ -2005,8 +2007,8 @@ def page_exit():
     st.session_state.setdefault("exit_stage", "scanning")
 
     st.html(
-    '<div class="card">'
-)
+            "</br> </br>"
+    )
     st.markdown("### 🚚 خروج کالا از انبار")
 
     if st.session_state.exit_stage == "done":
@@ -2094,8 +2096,9 @@ def page_exit():
 # ---------------------------------------------------------------------------
 def page_analysis():
     st.html(
-    '<div class="card">'
-)
+            "</br> </br>"
+    )
+
     st.markdown("### 📊 تحلیل داده")
 
     inv_df = get_inventory_raw_df()
@@ -2156,9 +2159,7 @@ def page_analysis():
     )
     st.html("</div>")
 
-    st.html(
-    '<div class="download-card">'
-)
+
     st.markdown("#### 📥 دانلود گزارش کامل اکسل")
     st.markdown("خروجی استاندارد Excel شامل «موجودی فعلی» و «تاریخچه‌ی کامل تراکنش‌ها»، آماده برای ارسال یا آرشیو.")
     st.download_button(
@@ -2177,13 +2178,13 @@ def page_analysis():
 require_login()
 kill_browser_autofill()
 
-top_logo, top_title, top_user = st.columns([1, 3, 1.2])
+top_logo, top_title, top_user = st.columns([0.8, 4, 1.2])
 with top_logo:
-    render_logo(height_px=52)
+    render_logo(height_px=100)
 with top_title:
     st.html(
-    f"""<div class="app-title-wrap">
-        <h1>{APP_TITLE}</h1>
+    f"""<div class="app-title-wrap" >
+        <h1 style=>{APP_TITLE}</h1>
         <div class="app-subtitle">{APP_SUBTITLE}</div>
         </div>"""
 )
@@ -2201,7 +2202,9 @@ with top_user:
 # ---------------------------------------------------------------------------
 MENU_OPTIONS = ["ورود کالا / آدرس‌دهی", "موجودی / فیزیک کالا", "خروج کالا", "تحلیل داده"]
 MENU_ICONS = ["box-seam-fill", "clipboard2-data-fill", "truck", "bar-chart-line-fill"]
-
+st.html(
+    '<div class="card">'
+)
 try:
     from streamlit_option_menu import option_menu
     selected = option_menu(
@@ -2212,8 +2215,8 @@ try:
         key="main_menu",
         styles={
             "container": {
-                "padding": "8px", "background-color": "#ffffff", "border-radius": "16px",
-                "box-shadow": "0 4px 16px rgba(13,71,161,0.10)", "direction": "rtl",
+                "padding": "8px", "background-color": "radial-gradient(circle at top right, #eaf2fb 0%, #f7faff 45%, #e3edfa 100%)", "border-radius": "16px",
+                "box-shadow": "0 4px 20px rgba(13,71,161,0.10)", "direction": "rtl",
                 "overflow-x": "auto", "flex-wrap": "nowrap",
             },
             "icon": {"font-size": "17px"},
@@ -2221,7 +2224,7 @@ try:
                 "font-size": "14.5px", "font-weight": "600", "text-align": "center",
                 "margin": "0 3px", "border-radius": "12px", "padding": "11px 8px",
                 "direction": "rtl", "white-space": "nowrap", "flex-shrink": "0",
-                "color": "#1565c0", "--hover-color": "#eaf2fb",
+                "color": "#1565c0", "--hover-color": "#CCE5FF",
             },
             "nav-link-selected": {
                 "background": "linear-gradient(135deg, #0d47a1 0%, #1976d2 100%)",
