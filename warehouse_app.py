@@ -134,13 +134,7 @@ st.html(
     .logo-wrap img:hover { transform: scale(1.03); }
 
     .card {
-        background: #ffffff;
-        border-radius: 16px;
-        padding: 22px 26px;
-        box-shadow: 0 4px 18px rgba(13, 71, 161, 0.08);
-        margin-bottom: 16px;
-        border-top: 3px solid var(--brand-blue-light);
-    }
+        border: none !important; border-top: 1px dashed rgba(13,71,161,0.35) !important; margin: 14px 0 !important; background: none !important; 
     .card-success {
         background: #eafaf0;
         border: 2px solid #33b06f;
