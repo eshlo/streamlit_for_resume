@@ -87,7 +87,7 @@ LOGO_LINK = "https://www.parskhodro.ir/"
 DATA_DIR = "data"
 DB_PATH = os.path.join(DATA_DIR, "warehouse.db")
 
-DEBOUNCE_SECONDS = 2.0  # فاصله‌ی زمانی جلوگیری از ثبت تکراری - ثابت
+DEBOUNCE_SECONDS = 2.0
 
 # ---------------------------------------------------------------------------
 # استایل مدرن، ساده و راست‌چین
